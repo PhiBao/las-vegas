@@ -1,4 +1,4 @@
-export default {
+const worker = {
   async scheduled(event, env) {
     const url = env.TICK_URL || "https://las-vegas.vercel.app/api/agent/tick";
     const secret = env.CRON_SECRET;
@@ -23,3 +23,5 @@ export default {
     }
   }
 };
+
+export default worker;

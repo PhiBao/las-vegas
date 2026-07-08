@@ -77,8 +77,10 @@ export function JackpotVaultApp() {
 
   async function handleConnect() {
     setBusy("connect");
+    setNotice("Opening Sphere wallet — approve the connection in the popup.");
     try {
       const runtime = await connectSphereWallet();
+      window.focus();
       setWalletRuntime(runtime);
       setNotice("Sphere wallet connected on testnet2.");
     } catch (error) {
@@ -90,8 +92,10 @@ export function JackpotVaultApp() {
 
   async function handleMint() {
     setBusy("mint");
+    setNotice("Opening Sphere wallet — approve the mint intent in the popup.");
     try {
       const result = await mintTestUsdu(walletRuntime);
+      window.focus();
       setNotice(`Mint request submitted. ${shortReference(result)}`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Mint failed.");
@@ -103,12 +107,14 @@ export function JackpotVaultApp() {
   async function handleEnter() {
     if (!state) return;
     setBusy("enter");
+    setNotice("Opening Sphere wallet — approve the send intent in the popup.");
     try {
       const entryIntent = await sendJackpotEntry(
         walletRuntime,
         state.currentRound,
         state.config.entryAmountUsdu
       );
+      window.focus();
       const response = await fetch("/api/entries", {
         method: "POST",
         headers: { "content-type": "application/json" },
