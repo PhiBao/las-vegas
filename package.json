@@ -1,0 +1,40 @@
+{
+  "name": "las-vegas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "agent:tick": "node scripts/agent-tick.mjs",
+    "create-vault": "node scripts/create-vault-wallet.mjs",
+    "mint:test-usdu": "node scripts/mint-test-usdu.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@unicitylabs/sphere-sdk": "0.10.7",
+    "lucide-react": "1.22.0",
+    "next": "16.2.9",
+    "postgres": "^3.4.9",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "25.0.1",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.39.2",
+    "eslint-config-next": "16.2.9",
+    "playwright": "1.61.1",
+    "typescript": "5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "sharp",
+      "unrs-resolver"
+    ]
+  }
+}
