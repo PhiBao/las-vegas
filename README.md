@@ -20,7 +20,7 @@ Humans enter through the browser. Agents enter by reading a machine-readable ent
 This is a **contest submission** for the Unicity Sphere hackathon. It demonstrates:
 
 - **Real peer-to-peer settlement** — no mock transactions, no fake wallets. Every entry and payout is a real Sphere `send` intent on testnet2.
-- **Autonomous agent settlement** — a vault agent runs via cron (every 5 minutes on Vercel), receives deposits, and settles rounds without human intervention.
+- **Autonomous agent settlement** — a vault agent runs via Cloudflare Worker cron (every 30 minutes), receives deposits, and settles rounds without human intervention.
 - **Agent-to-agent commerce** — external autonomous agents can discover the jackpot via `/api/agent-entry-card`, read the round state, send payment, and register their entry programmatically.
 - **Commit-reveal fairness** — the vault commits a SHA-256 seed hash when a round opens and reveals the seed at settlement. The winner is deterministically computed from the seed plus sorted entry IDs.
 
@@ -39,13 +39,13 @@ This is a **contest submission** for the Unicity Sphere hackathon. It demonstrat
 
 ```bash
 # 1. Read the current round
-curl https://your-app.vercel.app/api/agent-entry-card
+curl https://las-vegas-beta.vercel.app/api/agent-entry-card
 
 # 2. Send the payment via Sphere SDK
 # (use the vaultRecipient, amount, and memo from the card)
 
 # 3. Register your entry
-curl -X POST https://your-app.vercel.app/api/entries \
+curl -X POST https://las-vegas-beta.vercel.app/api/entries \
   -H "content-type: application/json" \
   -d '{
     "roundId": "<roundId from card>",
@@ -59,7 +59,7 @@ curl -X POST https://your-app.vercel.app/api/entries \
 
 ### Autonomous settlement
 
-The vault agent runs at `/api/agent/tick` via Vercel Cron every 5 minutes:
+A **Cloudflare Worker** (`las-vegas-tick-cron`) calls `/api/agent/tick` every 30 minutes:
 
 - Receives pending deposits from the Sphere delivery mailbox
 - Locks any expired rounds
@@ -67,38 +67,48 @@ The vault agent runs at `/api/agent/tick` via Vercel Cron every 5 minutes:
 - Sends the pot to the winner
 - Opens the next round
 
+30 minutes is sufficient because rounds are 4 hours long — the worst case delay after a round expires is 30 minutes, which is acceptable for a game.
+
 Manual trigger:
 ```bash
-curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://your-app.vercel.app/api/agent/tick
+curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://las-vegas-beta.vercel.app/api/agent/tick
 ```
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────┐
 │                    BROWSER (Client)                      │
 │                                                          │
 │  JackpotVaultApp.tsx                                     │
 │  ├── Polls /api/state every 15s                          │
 │  ├── Sphere wallet connection (autoConnect)              │
 │  ├── Mint test USDU via Sphere intent                    │
-│  ├── Enter round via Sphere send intent → POST /entries   │
+│  ├── Enter round via Sphere send intent → POST /entries  │
 │  └── Load agent entry card from /api/agent-entry-card    │
-└──────────────────────┬──────────────────────────────────┘
+└──────────────────────┬───────────────────────────────────┘
                        │ HTTP (fetch)
-┌──────────────────────┴──────────────────────────────────┐
-│                NEXT.JS SERVER (API Routes)                │
+┌──────────────────────┴───────────────────────────────────┐
+│                NEXT.JS SERVER (Vercel)                   │
 │                                                          │
 │  /api/state          GET   Full public round state       │
 │  /api/entries        POST  Record a jackpot entry        │
 │  /api/agent-entry-card GET  Machine-readable agent card  │
 │  /api/health         GET   Health check + config status  │
-│  /api/agent/tick     POST  Vault settlement (cron)       │
+│  /api/agent/tick     POST  Vault settlement endpoint     │
 │                                                          │
-│  jackpot-store.ts    Data layer (Postgres + file fallback)│
+│  jackpot-store.ts    Data layer (Neon Postgres)          │
 │  sphere-vault.ts     Server-side Sphere SDK integration  │
 │  vault-agent.ts      Settlement orchestrator             │
-└──────────────────────┬──────────────────────────────────┘
+└──────────────────────┬───────────────────────────────────┘
+                       │
+    ┌──────────────────┴──────────────────┐
+    │                                     │
+    │  Cloudflare Worker                  │
+    │  las-vegas-tick-cron                │
+    │  Calls /api/agent/tick every 30min  │
+    │                                     │
+    └──────────────────┬──────────────────┘
                        │
               @unicitylabs/sphere-sdk
                        │
@@ -114,10 +124,10 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://your-app.vercel.app
 |-------|-----------|
 | Frontend | Next.js 16 (App Router), React 19, TypeScript |
 | Styling | Custom CSS (dark theme, no framework) |
-| Backend | Next.js API routes (Node.js runtime) |
+| Backend | Next.js API routes (Node.js runtime) on Vercel |
 | Database | Neon Postgres (free tier) |
+| Cron | Cloudflare Worker (`las-vegas-tick-cron`) — every 30 min |
 | Blockchain | Unicity Sphere testnet2 via `@unicitylabs/sphere-sdk` |
-| Deployment | Vercel (with Cron Jobs for autonomous settlement) |
 | Testing | Playwright smoke tests |
 
 ## Project structure
@@ -152,9 +162,12 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://your-app.vercel.app
 │   ├── create-vault-wallet.mjs            # Wallet creation tool
 │   ├── mint-test-usdu.mjs                 # USDU minting tool
 │   └── smoke.mjs                          # E2E smoke test
+├── workers/
+│   └── tick-cron/                         # Cloudflare Worker
+│       ├── wrangler.toml                  # Worker config (cron: */30 * * * *)
+│       └── index.js                       # Calls /api/agent/tick
 ├── .env.example                           # Env var template
-├── SETUP_JACKPOT_TESTNET.md               # Deployment guide
-└── vercel.json                            # Cron configuration
+└── SETUP_JACKPOT_TESTNET.md               # Deployment guide
 ```
 
 ## Quick start
@@ -179,11 +192,11 @@ Open [http://localhost:3000](http://localhost:3000).
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `NEXT_PUBLIC_APP_URL` | Public URL for agent entry cards | `https://las-vegas.vercel.app` |
+| `NEXT_PUBLIC_APP_URL` | Public URL for agent entry cards | `https://las-vegas-beta.vercel.app` |
 | `NEXT_PUBLIC_JACKPOT_VAULT_RECIPIENT` | Vault wallet address (nametag or DIRECT) | `@sphere-jackpot-vault` |
 | `DATABASE_URL` | Neon Postgres connection string | `postgresql://...neon.tech/...` |
 | `JACKPOT_VAULT_MNEMONIC` | Vault wallet mnemonic (NEVER commit this) | `twelve words...` |
-| `CRON_SECRET` | Bearer token for cron tick auth | `openssl rand -hex 32` |
+| `CRON_SECRET` | Bearer token for tick auth (shared with CF Worker) | `openssl rand -hex 32` |
 
 ### Optional
 
@@ -235,11 +248,32 @@ Returns a machine-readable JSON card with everything an agent needs to enter the
 
 ### `POST /api/agent/tick`
 
-Triggers vault settlement. Authenticated via `Authorization: Bearer $CRON_SECRET`. Vercel Cron calls this every 5 minutes.
+Triggers vault settlement. Authenticated via `Authorization: Bearer $CRON_SECRET`. Called every 30 minutes by the Cloudflare Worker. Can also be triggered manually.
 
 ### `GET /api/health`
 
 Returns config status and setup warnings. Useful for verifying deployment health.
+
+## Cloudflare Worker
+
+The vault settlement cron runs as a Cloudflare Worker (`las-vegas-tick-cron`) instead of Vercel Cron, avoiding Vercel's cron job limits.
+
+**Worker details:**
+- **Name:** `las-vegas-tick-cron`
+- **URL:** `https://YOUR-WORKER.workers.dev`
+- **Schedule:** Every 30 minutes (`*/30 * * * *`)
+- **Secrets:** `CRON_SECRET`, `TICK_URL`
+
+**To update TICK_URL** (after Vercel deploy):
+```bash
+echo "https://YOUR-VERCEL-URL/api/agent/tick" | wrangler secret put TICK_URL
+```
+
+**To deploy the worker locally:**
+```bash
+cd workers/tick-cron
+CLOUDFLARE_API_TOKEN="your-token" CLOUDFLARE_ACCOUNT_ID="your-id" wrangler deploy
+```
 
 ## Available scripts
 
@@ -262,7 +296,7 @@ Everything in this app is real on the Unicity Sphere testnet2:
 - **Entry payments** — Real peer-to-peer `send` intent to the vault wallet
 - **Vault settlement** — Server-side wallet initialized from mnemonic, receives deposits, sends payouts
 - **Persistence** — Neon Postgres with auto-created schema (4 tables)
-- **Autonomous agent** — Cron-triggered settlement that receives, selects winner, and pays out
+- **Autonomous agent** — Cloudflare Worker cron triggers settlement every 30 minutes
 
 ## Scope notes
 

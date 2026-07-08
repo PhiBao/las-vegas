@@ -28,7 +28,7 @@ Save the mnemonic for step 4.
 
 ## 2. Set up Neon Postgres (free tier)
 
-Vercel Postgres is deprecated. Use [Neon](https://neon.tech) free tier (512MB, 190 compute hours/month).
+Use [Neon](https://neon.tech) free tier (512MB, 190 compute hours/month).
 
 1. Sign up at https://neon.tech
 2. Create a new project (any region)
@@ -58,7 +58,7 @@ Set these in **Vercel Dashboard → Settings → Environment Variables** (or in 
 
 | Variable | Value | Source |
 |----------|-------|--------|
-| `NEXT_PUBLIC_APP_URL` | `https://your-app.vercel.app` | Your Vercel deployment URL |
+| `NEXT_PUBLIC_APP_URL` | `https://las-vegas-beta.vercel.app` | Your Vercel deployment URL |
 | `NEXT_PUBLIC_JACKPOT_VAULT_RECIPIENT` | `@sphere-jackpot-vault` | From step 1 |
 | `DATABASE_URL` | `postgres://neondb_owner:...@ep-xxx.neon.tech/...` | From Neon dashboard |
 | `JACKPOT_VAULT_MNEMONIC` | `twelve or twenty four words` | From step 1 (copy immediately!) |
@@ -83,7 +83,29 @@ JACKPOT_VAULT_MNEMONIC="your mnemonic" pnpm mint:test-usdu
 JACKPOT_VAULT_MNEMONIC="your mnemonic" node scripts/mint-test-usdu.mjs 500
 ```
 
-## 6. Verify the flow
+## 6. Set up Cloudflare Worker cron
+
+Vercel has cron job limits. Settlement runs as a **Cloudflare Worker** instead.
+
+The worker is already deployed at `las-vegas-tick-cron`. After deploying to Vercel, update the tick URL:
+
+```bash
+cd workers/tick-cron
+echo "https://las-vegas-beta.vercel.app/api/agent/tick" | wrangler secret put TICK_URL
+```
+
+**Worker details:**
+- **Name:** `las-vegas-tick-cron`
+- **Schedule:** Every 30 minutes (`*/30 * * * *`)
+- **Secrets:** `CRON_SECRET`, `TICK_URL` (both encrypted at rest)
+
+**To re-deploy the worker:**
+```bash
+cd workers/tick-cron
+CLOUDFLARE_API_TOKEN="your-token" CLOUDFLARE_ACCOUNT_ID="your-id" wrangler deploy
+```
+
+## 7. Verify the flow
 
 ### Local testing
 
@@ -107,7 +129,7 @@ pnpm agent:tick
 4. Click **Enter current round** → approve send intent
 5. Verify entry appears in round feed, pot increases
 6. Wait for round to expire (or set `ROUND_DURATION_MINUTES=5`)
-7. Run `pnpm agent:tick` or wait for Vercel cron (every 5 min)
+7. Run `pnpm agent:tick` or wait for Cloudflare Worker cron (every 30 min)
 8. Check winner tape and vault audit for seed reveal + payout
 
 ### Smoke test
@@ -116,7 +138,7 @@ pnpm agent:tick
 pnpm smoke
 ```
 
-## 7. What is real
+## 8. What is real
 
 - Sphere wallet connection on `testnet2` via SDK `autoConnect`
 - USDU mint intent through Sphere
@@ -124,31 +146,34 @@ pnpm smoke
 - Server-side vault wallet initialized from `JACKPOT_VAULT_MNEMONIC`
 - Vault receive and payout through the Sphere SDK
 - Persistent Postgres storage via Neon
-- Autonomous settlement via Vercel Cron (every 5 minutes)
+- Autonomous settlement via Cloudflare Worker cron (every 30 minutes)
 - Commit-reveal randomness for winner selection
 
-## 8. Architecture
+## 9. Architecture
 
 ```
 Browser (JackpotVaultApp.tsx)
   ├── Connect Sphere → autoConnect popup
-  ├── Mint USDU → sphere.payments.mint()
+  ├── Mint USDU → sphere.payments.mintFungibleToken()
   ├── Enter round → sphere.payments.send() → POST /api/entries
   └── Poll /api/state every 15s
 
-Server (Next.js API Routes)
+Server (Next.js API Routes on Vercel)
   ├── GET  /api/state          → Full public round state
   ├── POST /api/entries        → Record a jackpot entry
   ├── GET  /api/agent-entry-card → Machine-readable agent card
   ├── GET  /api/health         → Health check + config status
-  └── POST /api/agent/tick     → Autonomous vault settlement (cron)
+  └── POST /api/agent/tick     → Vault settlement endpoint
 
-Vault Agent (runs via cron every 5 min)
+Cloudflare Worker (las-vegas-tick-cron)
+  └── Every 30 min → POST /api/agent/tick
+
+Vault Agent (triggered by worker)
   ├── receiveVaultDeposits()   → sphere.payments.receive()
   ├── settleDueRounds()        → Lock expired rounds, select winner
   └── sendVaultPayout()        → sphere.payments.send() to winner
 ```
 
-## 9. Scope notes
+## 10. Scope notes
 
 This is testnet-only. It is not a real-money gambling product and does not claim production-grade randomness. The MVP uses commit-reveal randomness suitable for contest validation: the vault commits a seed hash when a round opens, reveals the seed at settlement, and computes the winner from the seed plus the sorted entry IDs.
