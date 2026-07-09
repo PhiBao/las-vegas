@@ -58,31 +58,43 @@ async function initVaultSphere(requestUrl?: string) {
   await fs.mkdir(config.walletDataDir, { recursive: true });
   await fs.mkdir(config.walletTokensDir, { recursive: true });
 
-  const base = createNodeProviders({
-    network: SDK_NETWORK_NAME,
-    dataDir: config.walletDataDir,
-    tokensDir: config.walletTokensDir,
-    oracle: {
-      apiKey: config.oracleApiKey
-    },
-    transport: {
-      debug: false
+  const prevCwd = process.cwd();
+  if (process.env.VERCEL || process.env.VERCEL_ENV) {
+    try { await fs.mkdir("/tmp/.data", { recursive: true }); } catch {}
+    process.chdir("/tmp");
+  }
+
+  try {
+    const base = createNodeProviders({
+      network: SDK_NETWORK_NAME,
+      dataDir: config.walletDataDir,
+      tokensDir: config.walletTokensDir,
+      oracle: {
+        apiKey: config.oracleApiKey
+      },
+      transport: {
+        debug: false
+      }
+    });
+    const providers = createWalletApiProviders(base, {
+      baseUrl: WALLET_API_URL,
+      network: "testnet2",
+      deviceId: "sphere-jackpot-vault"
+    });
+
+    const { sphere } = await Sphere.init({
+      ...providers,
+      mnemonic: config.vaultMnemonic,
+      nametag: config.vaultNametag || undefined,
+      autoGenerate: false,
+      network: SDK_NETWORK_NAME,
+      communications: { cacheMessages: false }
+    });
+
+    return sphere;
+  } finally {
+    if (process.env.VERCEL || process.env.VERCEL_ENV) {
+      process.chdir(prevCwd);
     }
-  });
-  const providers = createWalletApiProviders(base, {
-    baseUrl: WALLET_API_URL,
-    network: "testnet2",
-    deviceId: "sphere-jackpot-vault"
-  });
-
-  const { sphere } = await Sphere.init({
-    ...providers,
-    mnemonic: config.vaultMnemonic,
-    nametag: config.vaultNametag || undefined,
-    autoGenerate: false,
-    network: SDK_NETWORK_NAME,
-    communications: { cacheMessages: false }
-  });
-
-  return sphere;
+  }
 }

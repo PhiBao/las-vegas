@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const state = await getJackpotState(request.url);
     return NextResponse.json(state);
   } catch (error) {
+    console.error("[state] Error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to load jackpot state." },
       { status: 500 }
