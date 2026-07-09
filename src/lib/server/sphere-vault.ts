@@ -17,13 +17,28 @@ type SphereInstance = Awaited<ReturnType<typeof initVaultSphere>>;
 
 let spherePromise: Promise<SphereInstance> | null = null;
 
+const isVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
+
+async function withTmpCwd<T>(fn: () => T | Promise<T>): Promise<T> {
+  if (!isVercel) return fn();
+  const prevCwd = process.cwd();
+  process.chdir("/tmp");
+  try {
+    return await fn();
+  } finally {
+    process.chdir(prevCwd);
+  }
+}
+
 export async function receiveVaultDeposits(requestUrl?: string): Promise<string | undefined> {
   const sphere = await getVaultSphere(requestUrl);
-  const transfers: unknown[] = [];
-  const result = await sphere.payments.receive(undefined, (transfer) => {
-    transfers.push(transfer);
+  return withTmpCwd(async () => {
+    const transfers: unknown[] = [];
+    const result = await sphere.payments.receive(undefined, (transfer) => {
+      transfers.push(transfer);
+    });
+    return JSON.stringify({ result, transfers });
   });
-  return JSON.stringify({ result, transfers });
 }
 
 export async function sendVaultPayout(
@@ -33,13 +48,15 @@ export async function sendVaultPayout(
   requestUrl?: string
 ): Promise<string> {
   const sphere = await getVaultSphere(requestUrl);
-  const result = await sphere.payments.send({
-    recipient,
-    amount: toBaseUnits(amountUsdu),
-    coinId: USDU_COIN_ID,
-    memo
+  return withTmpCwd(async () => {
+    const result = await sphere.payments.send({
+      recipient,
+      amount: toBaseUnits(amountUsdu),
+      coinId: USDU_COIN_ID,
+      memo
+    });
+    return JSON.stringify(result);
   });
-  return JSON.stringify(result);
 }
 
 async function getVaultSphere(requestUrl?: string): Promise<SphereInstance> {
@@ -58,13 +75,7 @@ async function initVaultSphere(requestUrl?: string) {
   await fs.mkdir(config.walletDataDir, { recursive: true });
   await fs.mkdir(config.walletTokensDir, { recursive: true });
 
-  const prevCwd = process.cwd();
-  if (process.env.VERCEL || process.env.VERCEL_ENV) {
-    try { await fs.mkdir("/tmp/.data", { recursive: true }); } catch {}
-    process.chdir("/tmp");
-  }
-
-  try {
+  return withTmpCwd(async () => {
     const base = createNodeProviders({
       network: SDK_NETWORK_NAME,
       dataDir: config.walletDataDir,
@@ -92,9 +103,5 @@ async function initVaultSphere(requestUrl?: string) {
     });
 
     return sphere;
-  } finally {
-    if (process.env.VERCEL || process.env.VERCEL_ENV) {
-      process.chdir(prevCwd);
-    }
-  }
+  });
 }
