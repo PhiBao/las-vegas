@@ -3,6 +3,8 @@ import "server-only";
 import { Sphere } from "@unicitylabs/sphere-sdk";
 import { createNodeProviders, createWalletApiProviders } from "@unicitylabs/sphere-sdk/impl/nodejs";
 
+import fs from "node:fs/promises";
+
 import {
   SDK_NETWORK_NAME,
   toBaseUnits,
@@ -52,6 +54,9 @@ async function initVaultSphere(requestUrl?: string) {
   if (!config.vaultMnemonic) {
     throw new Error("JACKPOT_VAULT_MNEMONIC is required for autonomous settlement.");
   }
+
+  await fs.mkdir(config.walletDataDir, { recursive: true });
+  await fs.mkdir(config.walletTokensDir, { recursive: true });
 
   const base = createNodeProviders({
     network: SDK_NETWORK_NAME,

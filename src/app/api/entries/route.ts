@@ -5,15 +5,26 @@ import type { CreateEntryInput } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 export async function POST(request: NextRequest) {
+  let input: Partial<CreateEntryInput>;
   try {
-    const input = (await request.json()) as Partial<CreateEntryInput>;
+    input = (await request.json()) as Partial<CreateEntryInput>;
+  } catch {
+    console.error("[entries] Failed to parse request body");
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  try {
     validateInput(input);
+    console.log(`[entries] Creating entry: round=${input.roundId} kind=${input.kind} entrant=${input.entrant.label} memo=${input.memo} txRefLen=${input.txReference.length}`);
     const result = await createJackpotEntry(input, request.url);
+    console.log(`[entries] Entry created: ${result.entry.id}`);
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create jackpot entry.";
+    console.error(`[entries] Entry failed: ${message}`);
     const status = /required|must be|not configured|not open|ended|amount|memo|wallet|reference|not found/i.test(message)
       ? 400
       : 500;

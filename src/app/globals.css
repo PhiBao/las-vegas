@@ -199,6 +199,12 @@ pre {
   background: transparent;
 }
 
+.notice-error {
+  border-color: rgba(255, 100, 100, 0.4);
+  background: rgba(255, 60, 60, 0.08);
+  color: #ff9090;
+}
+
 .vault-stage {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);

@@ -92,6 +92,15 @@ export async function mintTestUsdu(runtime: WalletRuntime | null): Promise<strin
   return stringifyIntentResult(response);
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s. The popup may have closed before the response reached the app. Try again.`)), ms)
+    )
+  ]);
+}
+
 export async function sendJackpotEntry(
   runtime: WalletRuntime | null,
   round: PublicRound,
@@ -106,12 +115,19 @@ export async function sendJackpotEntry(
   }
 
   const memo = makeEntryMemo(round.id, runtime.connection.nametag ?? runtime.connection.label);
-  const response = await runtime.client.intent("send", {
-    to: vaultRecipient,
-    amount: toBaseUnits(amountUsdu),
-    coinId: USDU_COIN_ID,
-    memo
-  });
+  console.log("[wallet] Calling client.intent send...");
+  const response = await withTimeout(
+    runtime.client.intent("send", {
+      to: vaultRecipient,
+      amount: toBaseUnits(amountUsdu),
+      coinId: USDU_COIN_ID,
+      memo
+    }),
+    60_000,
+    "Sphere send intent"
+  );
+  console.log("[wallet] Intent resolved:", JSON.stringify(response));
+  console.log("[wallet] Intent keys:", response && typeof response === "object" ? Object.keys(response) : "N/A");
 
   return {
     memo,
@@ -127,9 +143,20 @@ export function getEntrantRecipient(connection: WalletConnection): string {
   return connection.directAddress ?? connection.nametag ?? connection.publicKey;
 }
 
+let _intentSeq = 0;
+
 function stringifyIntentResult(value: unknown): string {
   if (typeof value === "string") return value;
-  return JSON.stringify(value);
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.transferId === "string") return obj.transferId;
+    if (typeof obj.tokenId === "string") return obj.tokenId;
+    if (typeof obj.ref === "object" && obj.ref && typeof (obj.ref as Record<string, unknown>).transferId === "string") {
+      return (obj.ref as Record<string, unknown>).transferId as string;
+    }
+  }
+  _intentSeq++;
+  return `sphere-send-${Date.now()}-${_intentSeq}`;
 }
 
 function shortKey(value: string): string {

@@ -31,13 +31,18 @@ export type ServerConfig = {
   walletTokensDir: string;
 };
 
-const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const isServerless = Boolean(
+  process.env.VERCEL ||
+  process.env.VERCEL_ENV ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.AWS_EXECUTION_ENV
+);
 
-function serverSafePath(relativePath: string): string {
+export function resolvePath(...segments: string[]): string {
   if (isServerless) {
-    return path.join("/tmp", relativePath);
+    return path.resolve("/tmp", ...segments);
   }
-  return path.join(process.cwd(), relativePath);
+  return path.resolve(process.cwd(), ...segments);
 }
 
 export function getServerConfig(requestUrl?: string): ServerConfig {
@@ -58,7 +63,7 @@ export function getServerConfig(requestUrl?: string): ServerConfig {
     roundDurationMinutes,
     storageFile:
       process.env.JACKPOT_STORAGE_FILE?.trim() ||
-      serverSafePath(path.join(".data", "jackpot-store.json")),
+      resolvePath(".data", "jackpot-store.json"),
     vaultMnemonic: process.env.JACKPOT_VAULT_MNEMONIC?.trim() ?? "",
     vaultNametag: process.env.JACKPOT_VAULT_NAMETAG?.replace(/^@/, "").trim() ?? "",
     vaultRecipient:
@@ -67,10 +72,10 @@ export function getServerConfig(requestUrl?: string): ServerConfig {
       "",
     walletDataDir:
       process.env.JACKPOT_WALLET_DATA_DIR?.trim() ||
-      serverSafePath(path.join(".data", "jackpot-vault", "wallet")),
+      resolvePath(".data", "jackpot-vault", "wallet"),
     walletTokensDir:
       process.env.JACKPOT_WALLET_TOKENS_DIR?.trim() ||
-      serverSafePath(path.join(".data", "jackpot-vault", "tokens"))
+      resolvePath(".data", "jackpot-vault", "tokens")
   };
 }
 

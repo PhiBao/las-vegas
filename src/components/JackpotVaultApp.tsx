@@ -31,6 +31,7 @@ export function JackpotVaultApp() {
   const [walletRuntime, setWalletRuntime] = useState<WalletRuntime | null>(null);
   const [busy, setBusy] = useState<BusyState>(null);
   const [notice, setNotice] = useState<string>("");
+  const [noticeKind, setNoticeKind] = useState<"info" | "error">("info");
   const [now, setNow] = useState(() => Date.now());
 
   const loadState = useCallback(async () => {
@@ -40,10 +41,15 @@ export function JackpotVaultApp() {
     setState(payload as PublicJackpotState);
   }, []);
 
+  const showNotice = useCallback((message: string, kind: "info" | "error" = "info") => {
+    setNotice(message);
+    setNoticeKind(kind);
+  }, []);
+
   useEffect(() => {
     const load = () => {
       void loadState().catch((error) => {
-        setNotice(error instanceof Error ? error.message : "Failed to load jackpot state.");
+        showNotice(error instanceof Error ? error.message : "Failed to load jackpot state.", "error");
       });
     };
     const initial = window.setTimeout(load, 0);
@@ -56,7 +62,7 @@ export function JackpotVaultApp() {
       window.clearInterval(refresh);
       window.clearInterval(clock);
     };
-  }, [loadState]);
+  }, [loadState, showNotice]);
 
   const timeLeft = useMemo(() => {
     if (!state) return "";
@@ -67,9 +73,9 @@ export function JackpotVaultApp() {
     setBusy("refresh");
     try {
       await loadState();
-      setNotice("Round state refreshed.");
+      showNotice("Round state refreshed.");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Refresh failed.");
+      showNotice(error instanceof Error ? error.message : "Refresh failed.", "error");
     } finally {
       setBusy(null);
     }
@@ -77,14 +83,14 @@ export function JackpotVaultApp() {
 
   async function handleConnect() {
     setBusy("connect");
-    setNotice("Opening Sphere wallet — approve the connection in the popup.");
+    showNotice("Opening Sphere wallet — approve the connection in the popup.");
     try {
       const runtime = await connectSphereWallet();
       window.focus();
       setWalletRuntime(runtime);
-      setNotice("Sphere wallet connected on testnet2.");
+      showNotice("Sphere wallet connected on testnet2.");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Sphere connection failed.");
+      showNotice(error instanceof Error ? error.message : "Sphere connection failed.", "error");
     } finally {
       setBusy(null);
     }
@@ -92,13 +98,13 @@ export function JackpotVaultApp() {
 
   async function handleMint() {
     setBusy("mint");
-    setNotice("Opening Sphere wallet — approve the mint intent in the popup.");
+    showNotice("Opening Sphere wallet — approve the mint intent in the popup.");
     try {
       const result = await mintTestUsdu(walletRuntime);
       window.focus();
-      setNotice(`Mint request submitted. ${shortReference(result)}`);
+      showNotice(`Mint request submitted. ${shortReference(result)}`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Mint failed.");
+      showNotice(error instanceof Error ? error.message : "Mint failed.", "error");
     } finally {
       setBusy(null);
     }
@@ -107,14 +113,18 @@ export function JackpotVaultApp() {
   async function handleEnter() {
     if (!state) return;
     setBusy("enter");
-    setNotice("Opening Sphere wallet — approve the send intent in the popup.");
+    showNotice("Opening Sphere wallet — approve the send intent in the popup.");
     try {
+      console.log("[enter] Starting sendJackpotEntry...");
       const entryIntent = await sendJackpotEntry(
         walletRuntime,
         state.currentRound,
         state.config.entryAmountUsdu
       );
+      console.log("[enter] Intent done, txRef:", entryIntent.txReference?.slice(0, 40));
       window.focus();
+      showNotice("Payment sent. Recording entry...");
+      console.log("[enter] POSTing to /api/entries...");
       const response = await fetch("/api/entries", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -127,12 +137,19 @@ export function JackpotVaultApp() {
           txReference: entryIntent.txReference
         })
       });
+      console.log("[enter] POST status:", response.status);
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Entry recording failed.");
+      if (!response.ok) {
+        const detail = payload.error ?? `HTTP ${response.status}`;
+        throw new Error(`Entry recording failed: ${detail}`);
+      }
       setState(payload.state as PublicJackpotState);
-      setNotice("Entry confirmed. The vault pot and public audit feed are updated.");
+      showNotice("Entry confirmed. The vault pot and public audit feed are updated.");
+      setTimeout(() => { void loadState().catch(() => undefined); }, 3000);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Entry failed.");
+      const msg = error instanceof Error ? error.message : "Entry failed.";
+      showNotice(`Entry error: ${msg}`, "error");
+      console.error("[enter] Entry failed:", error);
     } finally {
       setBusy(null);
     }
@@ -145,9 +162,9 @@ export function JackpotVaultApp() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Agent card failed.");
       setAgentCard(payload as AgentEntryCard);
-      setNotice("Agent entry card loaded.");
+      showNotice("Agent entry card loaded.");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Agent card failed.");
+      showNotice(error instanceof Error ? error.message : "Agent card failed.", "error");
     } finally {
       setBusy(null);
     }
@@ -156,7 +173,7 @@ export function JackpotVaultApp() {
   async function copyAgentCard() {
     if (!agentCard) return;
     await navigator.clipboard.writeText(JSON.stringify(agentCard, null, 2));
-    setNotice("Agent entry card copied.");
+    showNotice("Agent entry card copied.");
   }
 
   const round = state?.currentRound;
@@ -211,7 +228,7 @@ export function JackpotVaultApp() {
       </header>
 
       {notice ? (
-        <div className="notice" role="status">
+        <div className={`notice ${noticeKind === "error" ? "notice-error" : ""}`} role="status">
           <Activity size={18} />
           <span>{notice}</span>
           <button type="button" aria-label="Dismiss notice" onClick={() => setNotice("")}>
