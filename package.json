@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && mkdir -p .data/jackpot-vault/wallet .data/jackpot-vault/tokens .data/sphere-data && touch .data/.keep",
     "start": "next start",
     "lint": "eslint .",
     "agent:tick": "node scripts/agent-tick.mjs",
