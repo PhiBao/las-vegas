@@ -19,6 +19,11 @@ async function handleTick(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized vault tick." }, { status: 401 });
   }
 
+  const prevCwd = process.cwd();
+  if (process.env.VERCEL || process.env.VERCEL_ENV) {
+    process.chdir("/tmp");
+  }
+
   try {
     const result = await runVaultAgentTick(request.url);
     return NextResponse.json(result);
@@ -27,6 +32,10 @@ async function handleTick(request: NextRequest) {
       { error: error instanceof Error ? error.message : "Vault tick failed." },
       { status: 500 }
     );
+  } finally {
+    if (process.env.VERCEL || process.env.VERCEL_ENV) {
+      process.chdir(prevCwd);
+    }
   }
 }
 

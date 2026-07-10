@@ -1,5 +1,3 @@
-import "./patch-fs";
-
 import "server-only";
 
 import { Sphere } from "@unicitylabs/sphere-sdk";
