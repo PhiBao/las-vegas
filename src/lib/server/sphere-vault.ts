@@ -1,3 +1,5 @@
+import "./patch-fs";
+
 import "server-only";
 
 import { Sphere } from "@unicitylabs/sphere-sdk";
@@ -20,7 +22,7 @@ let spherePromise: Promise<SphereInstance> | null = null;
 export async function receiveVaultDeposits(requestUrl?: string): Promise<string | undefined> {
   const sphere = await getVaultSphere(requestUrl);
   const transfers: unknown[] = [];
-  const result = await sphere.payments.receive(undefined, (transfer) => {
+  const result = await sphere.payments.receive(undefined, (transfer: unknown) => {
     transfers.push(transfer);
   });
   return JSON.stringify({ result, transfers });
