@@ -479,9 +479,19 @@ pre {
   color: var(--gold);
 }
 
-.audit-line.error strong {
-  color: var(--red);
-}
+  .audit-line.error strong {
+    color: var(--red);
+  }
+
+  .load-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+  }
 
 .agent-card {
   min-height: 180px;

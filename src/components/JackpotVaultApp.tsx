@@ -33,6 +33,13 @@ export function JackpotVaultApp() {
   const [notice, setNotice] = useState<string>("");
   const [noticeKind, setNoticeKind] = useState<"info" | "error">("info");
   const [now, setNow] = useState(() => Date.now());
+  const [extraAudit, setExtraAudit] = useState<JackpotAuditEvent[]>([]);
+  const [auditCursor, setAuditCursor] = useState<string | null>(null);
+  const [hasMoreAudit, setHasMoreAudit] = useState(true);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+  const [extraRounds, setExtraRounds] = useState<PublicJackpotState["recentRounds"]>([]);
+  const [hasMoreRounds, setHasMoreRounds] = useState(true);
+  const [loadingRounds, setLoadingRounds] = useState(false);
 
   const loadState = useCallback(async () => {
     const response = await fetch("/api/state", { cache: "no-store" });
@@ -78,6 +85,51 @@ export function JackpotVaultApp() {
       showNotice(error instanceof Error ? error.message : "Refresh failed.", "error");
     } finally {
       setBusy(null);
+      setExtraAudit([]);
+      setAuditCursor(null);
+      setHasMoreAudit(true);
+      setExtraRounds([]);
+      setHasMoreRounds(true);
+    }
+  }
+
+  async function loadMoreAudit() {
+    if (loadingAudit || !state) return;
+    setLoadingAudit(true);
+    try {
+      const params = new URLSearchParams({ limit: "20" });
+      const cursor = auditCursor ?? (state.audit.length > 0 ? state.audit[state.audit.length - 1].id : null);
+      if (cursor) params.set("cursor", cursor);
+      const response = await fetch(`/api/audit?${params.toString()}`);
+      if (!response.ok) throw new Error("Failed to load audit events.");
+      const data = await response.json() as { events: JackpotAuditEvent[]; nextCursor?: string };
+      setExtraAudit((prev) => [...prev, ...data.events]);
+      if (data.nextCursor) {
+        setAuditCursor(data.nextCursor);
+      } else {
+        setHasMoreAudit(false);
+      }
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Failed to load audit.", "error");
+    } finally {
+      setLoadingAudit(false);
+    }
+  }
+
+  async function loadMoreRounds() {
+    if (loadingRounds || !state) return;
+    setLoadingRounds(true);
+    try {
+      const skip = state.recentRounds.length + extraRounds.length;
+      const response = await fetch(`/api/rounds?skip=${skip}&limit=5`);
+      if (!response.ok) throw new Error("Failed to load rounds.");
+      const data = await response.json() as { rounds: PublicJackpotState["recentRounds"]; hasMore: boolean };
+      setExtraRounds((prev) => [...prev, ...data.rounds]);
+      setHasMoreRounds(data.hasMore);
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Failed to load rounds.", "error");
+    } finally {
+      setLoadingRounds(false);
     }
   }
 
@@ -345,14 +397,33 @@ export function JackpotVaultApp() {
             <Trophy size={20} />
           </div>
           <div className="winner-list">
-            {state?.recentRounds.length ? (
-              state.recentRounds.map((pastRound) => (
-                <article className="winner-item" key={pastRound.id}>
-                  <strong>Round #{pastRound.roundNumber}</strong>
-                  <span>{pastRound.winnerLabel ?? "No winner"}</span>
-                  <small>{pastRound.payoutAmountUsdu ?? "0"} USDU</small>
-                </article>
-              ))
+            {(state?.recentRounds.length ?? 0) > 0 || extraRounds.length > 0 ? (
+              <>
+                {state?.recentRounds.map((pastRound) => (
+                  <article className="winner-item" key={pastRound.id}>
+                    <strong>Round #{pastRound.roundNumber}</strong>
+                    <span>{pastRound.winnerLabel ?? "No winner"}</span>
+                    <small>{pastRound.payoutAmountUsdu ?? "0"} USDU</small>
+                  </article>
+                ))}
+                {extraRounds.map((pastRound) => (
+                  <article className="winner-item" key={pastRound.id}>
+                    <strong>Round #{pastRound.roundNumber}</strong>
+                    <span>{pastRound.winnerLabel ?? "No winner"}</span>
+                    <small>{pastRound.payoutAmountUsdu ?? "0"} USDU</small>
+                  </article>
+                ))}
+                {hasMoreRounds && (
+                  <button
+                    className="secondary-button load-more"
+                    type="button"
+                    onClick={() => { void loadMoreRounds(); }}
+                    disabled={loadingRounds}
+                  >
+                    {loadingRounds ? <><LoaderCircle className="spin" size={14} /> Loading...</> : "Load older rounds"}
+                  </button>
+                )}
+              </>
             ) : (
               <EmptyState text="Winners appear after the first autonomous settlement." />
             )}
@@ -368,8 +439,21 @@ export function JackpotVaultApp() {
             <ShieldCheck size={20} />
           </div>
           <div className="audit-list">
-            {state?.audit.length ? (
-              state.audit.map((event) => <AuditLine event={event} key={event.id} />)
+            {(state?.audit.length ?? 0) > 0 || extraAudit.length > 0 ? (
+              <>
+                {state?.audit.map((event) => <AuditLine event={event} key={event.id} />)}
+                {extraAudit.map((event) => <AuditLine event={event} key={event.id} />)}
+                {hasMoreAudit && (
+                  <button
+                    className="secondary-button load-more"
+                    type="button"
+                    onClick={() => { void loadMoreAudit(); }}
+                    disabled={loadingAudit}
+                  >
+                    {loadingAudit ? <><LoaderCircle className="spin" size={14} /> Loading...</> : "Load older events"}
+                  </button>
+                )}
+              </>
             ) : (
               <EmptyState text="Audit events will stream here." />
             )}

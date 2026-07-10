@@ -113,16 +113,16 @@ export async function getJackpotState(requestUrl?: string): Promise<PublicJackpo
       SELECT * FROM jackpot_rounds
       WHERE status <> 'open'
       ORDER BY round_number DESC
-      LIMIT 8
+      LIMIT 5
     `;
     const recentEntries = await sql<EntryRow[]>`
-      SELECT * FROM jackpot_entries ORDER BY created_at DESC LIMIT 18
+      SELECT * FROM jackpot_entries ORDER BY created_at DESC LIMIT 10
     `;
     const payouts = await sql<PayoutRow[]>`
-      SELECT * FROM jackpot_payouts ORDER BY created_at DESC LIMIT 8
+      SELECT * FROM jackpot_payouts ORDER BY created_at DESC LIMIT 5
     `;
     const audit = await sql<AuditRow[]>`
-      SELECT * FROM jackpot_audit_events ORDER BY created_at DESC LIMIT 24
+      SELECT * FROM jackpot_audit_events ORDER BY created_at DESC LIMIT 10
     `;
 
     return {
@@ -868,6 +868,89 @@ function makeAuditEvent(event: Omit<JackpotAuditEvent, "id" | "createdAt">): Jac
 function normalizeNametag(nametag: string | undefined): string | undefined {
   if (!nametag) return undefined;
   return nametag.startsWith("@") ? nametag : `@${nametag}`;
+}
+
+export async function getPaginatedRounds(
+  skip: number,
+  limit: number,
+  requestUrl?: string
+): Promise<{ rounds: PublicRound[]; hasMore: boolean }> {
+  const config = getServerConfig(requestUrl);
+  limit = Math.min(Math.max(limit, 1), 20);
+
+  if (config.databaseUrl) {
+    const sql = await getSql(config);
+    const rows = await sql<RoundRow[]>`
+      SELECT * FROM jackpot_rounds
+      WHERE status <> 'open'
+      ORDER BY round_number DESC
+      LIMIT ${limit + 1} OFFSET ${skip}
+    `;
+    const hasMore = rows.length > limit;
+    if (hasMore) rows.pop();
+    const rounds = await Promise.all(
+      rows.map(async (round) => toPublicRound(round, await getEntriesForRound(round.id, config)))
+    );
+    return { rounds, hasMore };
+  }
+
+  const data = await readFileData(config);
+  const settled = data.rounds
+    .filter((round) => round.status !== "open")
+    .sort((a, b) => b.roundNumber - a.roundNumber);
+  const page = settled.slice(skip, skip + limit + 1);
+  const hasMore = page.length > limit;
+  if (hasMore) page.pop();
+  return {
+    rounds: page.map((round) => toPublicRoundFromInternal(
+      round,
+      data.entries.filter((entry) => entry.roundId === round.id)
+    )),
+    hasMore
+  };
+}
+
+export async function getPaginatedAudit(
+  cursor: string | undefined,
+  limit: number,
+  requestUrl?: string
+): Promise<{ events: JackpotAuditEvent[]; nextCursor?: string }> {
+  const config = getServerConfig(requestUrl);
+  limit = Math.min(Math.max(limit, 1), 50);
+
+  if (config.databaseUrl) {
+    const sql = await getSql(config);
+    const rows = cursor
+      ? await sql<AuditRow[]>`
+          SELECT * FROM jackpot_audit_events
+          WHERE id < ${cursor}
+          ORDER BY id DESC
+          LIMIT ${limit + 1}
+        `
+      : await sql<AuditRow[]>`
+          SELECT * FROM jackpot_audit_events
+          ORDER BY id DESC
+          LIMIT ${limit + 1}
+        `;
+
+    const hasMore = rows.length > limit;
+    if (hasMore) rows.pop();
+    return {
+      events: rows.map(auditFromRow),
+      nextCursor: hasMore && rows.length > 0 ? rows[rows.length - 1].id : undefined
+    };
+  }
+
+  const data = await readFileData(config);
+  const sorted = data.audit.slice().sort(descByCreatedAt);
+  const startIndex = cursor ? sorted.findIndex((e) => e.id === cursor) + 1 : 0;
+  const page = sorted.slice(startIndex, startIndex + limit + 1);
+  const hasMore = page.length > limit;
+  if (hasMore) page.pop();
+  return {
+    events: page,
+    nextCursor: hasMore && page.length > 0 ? page[page.length - 1].id : undefined
+  };
 }
 
 function sha256(value: string): string {
