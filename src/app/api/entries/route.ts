@@ -18,9 +18,7 @@ export async function POST(request: NextRequest) {
 
   try {
     validateInput(input);
-    console.log(`[entries] Creating entry: round=${input.roundId} kind=${input.kind} entrant=${input.entrant.label} memo=${input.memo} txRefLen=${input.txReference.length}`);
     const result = await createJackpotEntry(input, request.url);
-    console.log(`[entries] Entry created: ${result.entry.id}`);
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create jackpot entry.";

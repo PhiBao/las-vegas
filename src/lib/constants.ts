@@ -14,7 +14,7 @@ export const USDU_DECIMALS = 6;
 
 export const DEFAULT_ENTRY_AMOUNT_USDU = "1";
 export const DEFAULT_TEST_USDU_MINT_AMOUNT = "100";
-export const DEFAULT_ROUND_DURATION_MINUTES = 5;
+export const DEFAULT_ROUND_DURATION_MINUTES = 60;
 export const LOCAL_STORAGE_WARNING =
   "Local file storage is only for development. Use DATABASE_URL before submitting a live public app.";
 

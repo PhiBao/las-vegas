@@ -115,7 +115,6 @@ export async function sendJackpotEntry(
   }
 
   const memo = makeEntryMemo(round.id, runtime.connection.nametag ?? runtime.connection.label);
-  console.log("[wallet] Calling client.intent send...");
   const response = await withTimeout(
     runtime.client.intent("send", {
       to: vaultRecipient,
@@ -126,8 +125,6 @@ export async function sendJackpotEntry(
     60_000,
     "Sphere send intent"
   );
-  console.log("[wallet] Intent resolved:", JSON.stringify(response));
-  console.log("[wallet] Intent keys:", response && typeof response === "object" ? Object.keys(response) : "N/A");
 
   return {
     memo,

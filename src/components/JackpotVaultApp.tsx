@@ -167,16 +167,13 @@ export function JackpotVaultApp() {
     setBusy("enter");
     showNotice("Opening Sphere wallet — approve the send intent in the popup.");
     try {
-      console.log("[enter] Starting sendJackpotEntry...");
       const entryIntent = await sendJackpotEntry(
         walletRuntime,
         state.currentRound,
         state.config.entryAmountUsdu
       );
-      console.log("[enter] Intent done, txRef:", entryIntent.txReference?.slice(0, 40));
       window.focus();
       showNotice("Payment sent. Recording entry...");
-      console.log("[enter] POSTing to /api/entries...");
       const response = await fetch("/api/entries", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -189,7 +186,6 @@ export function JackpotVaultApp() {
           txReference: entryIntent.txReference
         })
       });
-      console.log("[enter] POST status:", response.status);
       const payload = await response.json();
       if (!response.ok) {
         const detail = payload.error ?? `HTTP ${response.status}`;

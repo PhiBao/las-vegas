@@ -20,7 +20,7 @@ Humans enter through the browser. Agents enter by reading a machine-readable ent
 This is a **contest submission** for the Unicity Sphere hackathon. It demonstrates:
 
 - **Real peer-to-peer settlement** — no mock transactions, no fake wallets. Every entry and payout is a real Sphere `send` intent on testnet2.
-- **Autonomous agent settlement** — a vault agent runs via Cloudflare Worker cron (every 30 minutes), receives deposits, and settles rounds without human intervention.
+- **Autonomous agent settlement** — a vault agent runs via Cloudflare Worker cron (every 10 minutes), receives deposits, and settles rounds without human intervention.
 - **Agent-to-agent commerce** — external autonomous agents can discover the jackpot via `/api/agent-entry-card`, read the round state, send payment, and register their entry programmatically.
 - **Commit-reveal fairness** — the vault commits a SHA-256 seed hash when a round opens and reveals the seed at settlement. The winner is deterministically computed from the seed plus sorted entry IDs.
 
@@ -59,7 +59,7 @@ curl -X POST https://las-vegas-beta.vercel.app/api/entries \
 
 ### Autonomous settlement
 
-A **Cloudflare Worker** (`las-vegas-tick-cron`) calls `/api/agent/tick` every 30 minutes:
+A **Cloudflare Worker** (`las-vegas-tick-cron`) calls `/api/agent/tick` every 10 minutes:
 
 - Receives pending deposits from the Sphere delivery mailbox
 - Locks any expired rounds
@@ -67,7 +67,7 @@ A **Cloudflare Worker** (`las-vegas-tick-cron`) calls `/api/agent/tick` every 30
 - Sends the pot to the winner
 - Opens the next round
 
-30 minutes is sufficient because rounds are 4 hours long — the worst case delay after a round expires is 30 minutes, which is acceptable for a game.
+10 minutes is sufficient because rounds are 1 hours long — the worst case delay after a round expires is 10 minutes, which is acceptable for a game.
 
 Manual trigger:
 ```bash
@@ -106,7 +106,7 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://las-vegas-beta.verc
     │                                     │
     │  Cloudflare Worker                  │
     │  las-vegas-tick-cron                │
-    │  Calls /api/agent/tick every 30min  │
+    │  Calls /api/agent/tick every 10min  │
     │                                     │
     └──────────────────┬──────────────────┘
                        │
@@ -126,7 +126,7 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://las-vegas-beta.verc
 | Styling | Custom CSS (dark theme, no framework) |
 | Backend | Next.js API routes (Node.js runtime) on Vercel |
 | Database | Neon Postgres (free tier) |
-| Cron | Cloudflare Worker (`las-vegas-tick-cron`) — every 30 min |
+| Cron | Cloudflare Worker (`las-vegas-tick-cron`) — every 10 min |
 | Blockchain | Unicity Sphere testnet2 via `@unicitylabs/sphere-sdk` |
 | Testing | Playwright smoke tests |
 
@@ -136,38 +136,39 @@ curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://las-vegas-beta.verc
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── agent/tick/route.ts       # Vault settlement endpoint
-│   │   │   ├── agent-entry-card/route.ts  # Machine-readable agent card
-│   │   │   ├── entries/route.ts           # Entry recording endpoint
-│   │   │   ├── health/route.ts            # Health check
-│   │   │   └── state/route.ts             # Public round state
-│   │   ├── globals.css                    # Dark theme styles
-│   │   ├── icon.svg                       # App favicon
-│   │   ├── layout.tsx                     # Root layout + metadata
-│   │   └── page.tsx                       # Home page
+│   │   │   ├── agent/tick/route.ts
+│   │   │   ├── agent-entry-card/route.ts
+│   │   │   ├── audit/route.ts
+│   │   │   ├── entries/route.ts
+│   │   │   ├── health/route.ts
+│   │   │   ├── rounds/route.ts
+│   │   │   └── state/route.ts
+│   │   ├── globals.css
+│   │   ├── icon.svg
+│   │   ├── layout.tsx
+│   │   └── page.tsx
 │   ├── components/
-│   │   └── JackpotVaultApp.tsx            # Main client component
+│   │   └── JackpotVaultApp.tsx
 │   └── lib/
-│       ├── constants.ts                   # App constants, USDU math
-│       ├── id.ts                          # ID generation
-│       ├── types.ts                       # TypeScript types
-│       ├── wallet.ts                      # Client-side Sphere operations
+│       ├── constants.ts
+│       ├── id.ts
+│       ├── types.ts
+│       ├── wallet.ts
 │       └── server/
-│           ├── env.ts                     # Server config from env vars
-│           ├── jackpot-store.ts           # Data persistence layer
-│           ├── sphere-vault.ts            # Server-side Sphere SDK
-│           └── vault-agent.ts             # Settlement orchestrator
+│           ├── env.ts
+│           ├── jackpot-store.ts
+│           ├── sphere-vault.ts
+│           └── vault-agent.ts
 ├── scripts/
-│   ├── agent-tick.mjs                     # CLI tick trigger
-│   ├── create-vault-wallet.mjs            # Wallet creation tool
-│   ├── mint-test-usdu.mjs                 # USDU minting tool
-│   └── smoke.mjs                          # E2E smoke test
-├── workers/
-│   └── tick-cron/                         # Cloudflare Worker
-│       ├── wrangler.toml                  # Worker config (cron: */30 * * * *)
-│       └── index.js                       # Calls /api/agent/tick
-├── .env.example                           # Env var template
-└── SETUP_JACKPOT_TESTNET.md               # Deployment guide
+│   ├── agent-tick.mjs
+│   ├── create-vault-wallet.mjs
+│   ├── mint-test-usdu.mjs
+│   └── smoke.mjs
+├── workers/tick-cron/
+│   ├── wrangler.toml
+│   └── index.js
+├── .env.example
+└── SETUP_JACKPOT_TESTNET.md
 ```
 
 ## Quick start
@@ -248,7 +249,7 @@ Returns a machine-readable JSON card with everything an agent needs to enter the
 
 ### `POST /api/agent/tick`
 
-Triggers vault settlement. Authenticated via `Authorization: Bearer $CRON_SECRET`. Called every 30 minutes by the Cloudflare Worker. Can also be triggered manually.
+Triggers vault settlement. Authenticated via `Authorization: Bearer $CRON_SECRET`. Called every 10 minutes by the Cloudflare Worker. Can also be triggered manually.
 
 ### `GET /api/health`
 
@@ -261,7 +262,7 @@ The vault settlement cron runs as a Cloudflare Worker (`las-vegas-tick-cron`) in
 **Worker details:**
 - **Name:** `las-vegas-tick-cron`
 - **URL:** `https://YOUR-WORKER.workers.dev`
-- **Schedule:** Every 30 minutes (`*/30 * * * *`)
+- **Schedule:** Every 10 minutes (`*/10 * * * *`)
 - **Secrets:** `CRON_SECRET`, `TICK_URL`
 
 **To update TICK_URL** (after Vercel deploy):
@@ -296,7 +297,7 @@ Everything in this app is real on the Unicity Sphere testnet2:
 - **Entry payments** — Real peer-to-peer `send` intent to the vault wallet
 - **Vault settlement** — Server-side wallet initialized from mnemonic, receives deposits, sends payouts
 - **Persistence** — Neon Postgres with auto-created schema (4 tables)
-- **Autonomous agent** — Cloudflare Worker cron triggers settlement every 30 minutes
+- **Autonomous agent** — Cloudflare Worker cron triggers settlement every 10 minutes
 
 ## Scope notes
 
