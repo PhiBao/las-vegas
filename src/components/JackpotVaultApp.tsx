@@ -97,8 +97,10 @@ export function JackpotVaultApp() {
     if (loadingAudit || !state) return;
     setLoadingAudit(true);
     try {
+      const allAudit = [...state.audit, ...extraAudit];
+      const cursor = allAudit.length > 0 ? allAudit[allAudit.length - 1].createdAt : undefined;
+
       const params = new URLSearchParams({ limit: "20" });
-      const cursor = auditCursor ?? (state.audit.length > 0 ? state.audit[state.audit.length - 1].id : null);
       if (cursor) params.set("cursor", cursor);
       const response = await fetch(`/api/audit?${params.toString()}`);
       if (!response.ok) throw new Error("Failed to load audit events.");

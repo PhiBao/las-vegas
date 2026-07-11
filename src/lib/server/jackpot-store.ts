@@ -937,13 +937,13 @@ export async function getPaginatedAudit(
     const rows = cursor
       ? await sql<AuditRow[]>`
           SELECT * FROM jackpot_audit_events
-          WHERE id < ${cursor}
-          ORDER BY id DESC
+          WHERE created_at < ${cursor}::timestamptz
+          ORDER BY created_at DESC, id DESC
           LIMIT ${limit + 1}
         `
       : await sql<AuditRow[]>`
           SELECT * FROM jackpot_audit_events
-          ORDER BY id DESC
+          ORDER BY created_at DESC, id DESC
           LIMIT ${limit + 1}
         `;
 
@@ -951,19 +951,19 @@ export async function getPaginatedAudit(
     if (hasMore) rows.pop();
     return {
       events: rows.map(auditFromRow),
-      nextCursor: hasMore && rows.length > 0 ? rows[rows.length - 1].id : undefined
+      nextCursor: hasMore && rows.length > 0 ? toIso(rows[rows.length - 1].created_at) : undefined
     };
   }
 
   const data = await readFileData(config);
   const sorted = data.audit.slice().sort(descByCreatedAt);
-  const startIndex = cursor ? sorted.findIndex((e) => e.id === cursor) + 1 : 0;
+  const startIndex = cursor ? sorted.findIndex((e) => e.createdAt < cursor) : 0;
   const page = sorted.slice(startIndex, startIndex + limit + 1);
   const hasMore = page.length > limit;
   if (hasMore) page.pop();
   return {
     events: page,
-    nextCursor: hasMore && page.length > 0 ? page[page.length - 1].id : undefined
+    nextCursor: hasMore && page.length > 0 ? page[page.length - 1].createdAt : undefined
   };
 }
 
