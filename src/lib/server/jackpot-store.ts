@@ -318,6 +318,20 @@ export async function settleDueRounds(
 
   if (config.databaseUrl) {
     const sql = await getSql(config);
+
+    // Retry rounds with failed payouts (e.g. session expiry recovered next tick)
+    const retryRounds = await sql<RoundRow[]>`
+      SELECT r.* FROM jackpot_rounds r
+      INNER JOIN jackpot_payouts p ON p.round_id = r.id AND p.status = 'failed'
+      WHERE r.status = 'payout_failed' AND r.pot_amount_usdu > '0'::numeric
+      ORDER BY r.round_number ASC
+    `;
+    for (const retryRound of retryRounds) {
+      await sql`UPDATE jackpot_rounds SET status = 'locking', updated_at = NOW() WHERE id = ${retryRound.id}`;
+      await settleOneSqlRound(retryRound, sendPayout, config);
+      settledRoundIds.push(retryRound.id);
+    }
+
     const dueRounds = await sql<RoundRow[]>`
       UPDATE jackpot_rounds
       SET status = 'locking', updated_at = NOW()

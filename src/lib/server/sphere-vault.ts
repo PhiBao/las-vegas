@@ -17,6 +17,10 @@ type SphereInstance = Awaited<ReturnType<typeof initVaultSphere>>;
 
 let spherePromise: Promise<SphereInstance> | null = null;
 
+function invalidateSphere() {
+  spherePromise = null;
+}
+
 export async function receiveVaultDeposits(requestUrl?: string): Promise<string | undefined> {
   const sphere = await getVaultSphere(requestUrl);
   const transfers: unknown[] = [];
@@ -33,13 +37,20 @@ export async function sendVaultPayout(
   requestUrl?: string
 ): Promise<string> {
   const sphere = await getVaultSphere(requestUrl);
-  const result = await sphere.payments.send({
-    recipient,
-    amount: toBaseUnits(amountUsdu),
-    coinId: USDU_COIN_ID,
-    memo
-  });
-  return JSON.stringify(result);
+  try {
+    const result = await sphere.payments.send({
+      recipient,
+      amount: toBaseUnits(amountUsdu),
+      coinId: USDU_COIN_ID,
+      memo
+    });
+    return JSON.stringify(result);
+  } catch (error) {
+    if (error instanceof Error && /subscription|expired|unauthorized/i.test(error.message)) {
+      invalidateSphere();
+    }
+    throw error;
+  }
 }
 
 async function getVaultSphere(requestUrl?: string): Promise<SphereInstance> {
