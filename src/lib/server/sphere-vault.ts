@@ -4,6 +4,7 @@ import { Sphere } from "@unicitylabs/sphere-sdk";
 import { createNodeProviders, createWalletApiProviders } from "@unicitylabs/sphere-sdk/impl/nodejs";
 
 import fs from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 
 import {
   SDK_NETWORK_NAME,
@@ -74,7 +75,8 @@ async function initVaultSphere(requestUrl?: string) {
     dataDir: config.walletDataDir,
     tokensDir: config.walletTokensDir,
     oracle: {
-      apiKey: config.oracleApiKey
+      apiKey: config.oracleApiKey,
+      debug: false
     },
     transport: {
       debug: false
@@ -83,7 +85,7 @@ async function initVaultSphere(requestUrl?: string) {
   const providers = createWalletApiProviders(base, {
     baseUrl: WALLET_API_URL,
     network: "testnet2",
-    deviceId: "sphere-jackpot-vault"
+    deviceId: `vault-${randomUUID()}`
   });
 
   const { sphere } = await Sphere.init({
